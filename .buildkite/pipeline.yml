@@ -1,0 +1,7 @@
+steps:
+  - label: "Build Geode Mod (Windows)"
+    agents:
+      queue: "windows" # use a Windows hosted/self-hosted queue
+    uses: geode-sdk/build-geode-mod@main
+    with:
+      combine: true
