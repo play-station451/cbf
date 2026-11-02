@@ -3,6 +3,10 @@
 #include <cstdint>
 #include <atomic>
 
+// Geode 5.x pulled this in transitively via its cocos CXBOXController.h, but Geode 6 (nightly)
+// no longer does, so the XINPUT_GAMEPAD_* deadzone/threshold macros have to be included directly
+#include <XInput.h>
+
 LARGE_INTEGER freq;
 
 constexpr size_t RING_BUFFER_SIZE = 256;

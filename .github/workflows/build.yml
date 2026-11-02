@@ -6,17 +6,50 @@ on:
     branches: ["**"]
 
 jobs:
+  build-linux-input:
+    name: Build linux-input.so
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:20.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y g++ libevdev-dev
+
+      - name: Build
+        working-directory: src/linux
+        run: |
+          mkdir -p ../../resources
+          g++ -O2 -o ../../resources/linux-input.so linux-input.cpp -levdev
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-input.so
+          path: resources/linux-input.so
+
   build:
     name: Windows
+    needs: ['build-linux-input']
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Download linux-input.so
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-input.so
+          path: resources
 
       - name: Build the mod
         id: build
         uses: geode-sdk/build-geode-mod@main
         with:
           combine: true
+          sdk: nightly
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
