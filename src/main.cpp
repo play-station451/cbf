@@ -102,9 +102,29 @@ void buildStepQueue(int stepCount) {
 	}
 
 	TimestampType deltaTime = currentFrameTime - lastFrameTime;
-	if (!std::isfinite(deltaTime) || deltaTime <= 0.0) {
+	if (!std::isfinite(deltaTime) || deltaTime < 0.0) {
 		skipUpdate = true;
 		stepQueue = {};
+		return;
+	}
+	if (deltaTime == 0.0) {
+		// No time elapsed: register queued inputs immediately (vanilla-style)
+		// so jumps are not delayed/dropped on zero-delta frames.
+		if (!linuxNative) {
+			if (playLayer->m_queuedButtons.size() < 1000) {
+				inputVector.insert(inputVector.end(), playLayer->m_queuedButtons.begin(), playLayer->m_queuedButtons.end());
+			}
+			playLayer->m_queuedButtons.clear();
+		}
+		for (auto& inp : inputVector) {
+			if (inp.m_timestamp != 0) {
+				playLayer->handleButton(inp.m_isPush, (int)inp.m_button, !inp.m_isPlayer2);
+			}
+		}
+		inputVector.clear();
+		skipUpdate = true;
+		stepQueue = {};
+		lastFrameTime = currentFrameTime;
 		return;
 	}
 	TimestampType stepDelta = deltaTime / stepCount;
