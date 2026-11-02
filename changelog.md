@@ -1,5 +1,6 @@
 # v1.5.0
 
+* Fix crash in spiderTestJump for spider type on GD 2.2091 (Windows)
 * Port to GD 2.2081
 * Switch to using Robtop's input handling to simplify the mod & improve compatibility
 * Remove "Right Click P2" option (not feasible to implement atm)
