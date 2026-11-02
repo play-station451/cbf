@@ -416,19 +416,20 @@ class $modify(PlayerObject) {
 		bool p1StartedOnGround = this->m_isOnGround;
 		bool p2StartedOnGround = p2->m_isOnGround;
 
-		bool p1NotBuffering = p1StartedOnGround
+		// Spider is handled in click-on-steps mode (no splitting) to avoid crashes in spiderTestJump
+		bool p1NotBuffering = !this->m_isSpider && (
+			p1StartedOnGround
 			|| this->m_touchingRings->count()
 			|| this->m_isDashing
-			|| (this->m_isDart || this->m_isBird || this->m_isShip || this->m_isSwing);
-			// Spider needs special handling to avoid crash in spiderTestJump
-			// Use a heuristic: if the player is upside-down and moving down, it's likely spider
-			bool p1IsSpider = !p1StartedOnGround && (this->m_yVelocity < 0) != this->m_isUpsideDown && this->m_isOnGround;
+			|| (this->m_isDart || this->m_isBird || this->m_isShip || this->m_isSwing)
+		);
 
-		bool p2NotBuffering = p2StartedOnGround
+		bool p2NotBuffering = !p2->m_isSpider && (
+			p2StartedOnGround
 			|| p2->m_touchingRings->count()
 			|| p2->m_isDashing
-			|| (p2->m_isDart || p2->m_isBird || p2->m_isShip || p2->m_isSwing);
-		bool p2IsSpider = !p2StartedOnGround && (p2->m_yVelocity < 0) != p2->m_isUpsideDown && p2->m_isOnGround;
+			|| (p2->m_isDart || p2->m_isBird || p2->m_isShip || p2->m_isSwing)
+		);
 
 		p1Pos = PlayerObject::getPosition(); // save for later to prevent desync with move triggers & some other issues
 		p2Pos = p2->getPosition();
@@ -445,7 +446,7 @@ class $modify(PlayerObject) {
 			const float substepDelta = stepDelta * step.deltaFactor;
 			rotationDelta = substepDelta;
 			
-			if (p1Split && !p1IsSpider) {
+			if (p1Split) {
 				PlayerObject::update(substepDelta);
 				if (!step.endStep) {
 					if (firstLoop && ((this->m_yVelocity < 0) ^ this->m_isUpsideDown)) this->m_isOnGround = p1StartedOnGround; // this fixes delayed inputs on platforms moving down for some reason
@@ -455,17 +456,9 @@ class $modify(PlayerObject) {
 					decomp_resetCollisionLog(this); // necessary for wave
 				}
 			}
-			else if (p1IsSpider) {
-				// For spider, use normal stepDelta to avoid crash in spiderTestJump
-				// Spider has special collision requirements that don't work with 0.0f delta checks
-				PlayerObject::update(stepDelta);
-				if (!step.endStep) {
-					PlayerObject::updateRotation(substepDelta);
-				}
-			}
 			else if (step.endStep) PlayerObject::update(stepDelta); // revert to click-on-steps mode when buffering to reduce bugs
 
-			if (p2Split && !p2IsSpider) {
+			if (p2Split) {
 				p2->update(substepDelta);
 				if (!step.endStep) {
 					if (firstLoop && ((p2->m_yVelocity < 0) ^ p2->m_isUpsideDown)) p2->m_isOnGround = p2StartedOnGround;
@@ -473,13 +466,6 @@ class $modify(PlayerObject) {
 					else pl->checkCollisions(p2, stepDelta, true);
 					p2->updateRotation(substepDelta);
 					decomp_resetCollisionLog(p2);
-				}
-			}
-			else if (p2IsSpider) {
-				// For spider, just do a normal update without the special collision handling
-				p2->update(stepDelta);
-				if (!step.endStep) {
-					p2->updateRotation(substepDelta);
 				}
 			}
 			else if (step.endStep) p2->update(stepDelta);
