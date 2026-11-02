@@ -3,6 +3,7 @@
 
 #include <limits>
 #include <math.h>
+#include <cmath>
 
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
@@ -50,6 +51,13 @@ based on when each input happened relative to the start of the frame
 */
 void buildStepQueue(int stepCount) {
 	PlayLayer* playLayer = PlayLayer::get();
+	if (!playLayer || stepCount <= 0) {
+		skipUpdate = true;
+		firstFrame = true;
+		inputVector.clear();
+		stepQueue = {};
+		return;
+	}
 	nextInput = EMPTY_INPUT;
 	stepQueue = {}; // shouldnt be necessary, but just in case
 
@@ -75,10 +83,21 @@ void buildStepQueue(int stepCount) {
 		return;
 	}
 
-	if (!linuxNative) inputVector.insert(inputVector.end(), playLayer->m_queuedButtons.begin(), playLayer->m_queuedButtons.end());
-	playLayer->m_queuedButtons.clear();
+	if (!linuxNative) {
+		if (playLayer->m_queuedButtons.size() < 1000) {
+			inputVector.insert(inputVector.end(), playLayer->m_queuedButtons.begin(), playLayer->m_queuedButtons.end());
+		}
+		playLayer->m_queuedButtons.clear();
+	}
 
 	TimestampType deltaTime = currentFrameTime - lastFrameTime;
+	if (!std::isfinite(deltaTime) || deltaTime <= 0.0) {
+		skipUpdate = true;
+		firstFrame = true;
+		inputVector.clear();
+		stepQueue = {};
+		return;
+	}
 	TimestampType stepDelta = deltaTime / stepCount;
 
 	int inputIdx = 0;
@@ -102,7 +121,9 @@ void buildStepQueue(int stepCount) {
 	}
 
 	lastFrameTime = currentFrameTime;
-	inputVector.erase(inputVector.begin(), inputVector.begin() + inputIdx); // keep inputs with timestamps later than currentFrameTime
+	if (inputIdx < (int)inputVector.size()) inputVector.erase(inputVector.begin(), inputVector.begin() + inputIdx); // keep inputs with timestamps later than currentFrameTime
+	else inputVector.clear();
+	if (inputVector.size() > 1000) inputVector.clear();
 }
 
 /*
@@ -310,7 +331,9 @@ class $modify(CCScheduler) {
 		#else
 		if (precisionFix && !linuxNative) {
 			static LARGE_INTEGER* cur = reinterpret_cast<LARGE_INTEGER*>(geode::base::getCocos() + 0x1a84d8);
-			currentFrameTime = (double)cur->QuadPart / (double)freq.QuadPart;
+			double ct = (double)cur->QuadPart / (double)freq.QuadPart;
+			if (std::isfinite(ct) && ct > 0.0) currentFrameTime = ct;
+			else currentFrameTime = getCurrentTimestamp();
 		}
 		#endif
 		
@@ -330,6 +353,13 @@ class $modify(GJBaseGameLayer) {
 	// either use the modified delta to calculate the step count, or use the actual delta if physics bypass is enabled
 	double calculateSteps(float modifiedDelta) {
 		PlayLayer* pl = PlayLayer::get();
+		if (!std::isfinite(modifiedDelta) || modifiedDelta <= 0.0f) {
+			skipUpdate = true;
+			firstFrame = true;
+			if (pl) inputVector.clear();
+			stepQueue = {};
+			return modifiedDelta;
+		}
 		if (pl) {
 			const float timewarp = pl->m_gameState.m_timeWarp;
 			if (physicsBypass) {
@@ -389,6 +419,8 @@ bool midStep = false;
 class $modify(PlayerObject) {
 	// split a single step based on the entries in stepQueue
 	void update(float stepDelta) {
+		if (!std::isfinite(stepDelta) || stepDelta < 0.0f) stepDelta = 1.0f / 240.0f;
+
 		PlayLayer* pl = PlayLayer::get();
 		
 		if (pl && this != pl->m_player1 || midStep) { // do all of the logic during the P1 update for simplicity
@@ -443,7 +475,8 @@ class $modify(PlayerObject) {
 
 		do {
 			step = popStepQueue();
-			const float substepDelta = stepDelta * step.deltaFactor;
+			float substepDelta = stepDelta * static_cast<float>(step.deltaFactor);
+			if (!std::isfinite(substepDelta) || substepDelta < 0.0f) substepDelta = stepDelta;
 			rotationDelta = substepDelta;
 			
 			if (p1Split) {
@@ -482,11 +515,11 @@ class $modify(PlayerObject) {
 		
 		if (pl && this == pl->m_player1 && p1Split && !midStep) {
 			PlayerObject::updateRotation(rotationDelta); // perform the remaining rotation that was left incomplete in the PlayerObject::update() hook
-			this->m_lastPosition = p1Pos; // move triggers & spider get confused without this (iirc)
+			if (std::isfinite(p1Pos.x) && std::isfinite(p1Pos.y)) this->m_lastPosition = p1Pos; // move triggers & spider get confused without this (iirc)
 		}
 		else if (pl && this == pl->m_player2 && p2Split && !midStep) {
 			PlayerObject::updateRotation(rotationDelta);
-			this->m_lastPosition = p2Pos;
+			if (std::isfinite(p2Pos.x) && std::isfinite(p2Pos.y)) pl->m_player2->m_lastPosition = p2Pos;
 		}
 		else PlayerObject::updateRotation(t);
 
