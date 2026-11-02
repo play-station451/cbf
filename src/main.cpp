@@ -53,11 +53,22 @@ void buildStepQueue(int stepCount) {
 	PlayLayer* playLayer = PlayLayer::get();
 	if (!playLayer || stepCount <= 0) {
 		skipUpdate = true;
-		firstFrame = true;
-		inputVector.clear();
 		stepQueue = {};
 		return;
 	}
+
+	// Disable CBF entirely on spider frames to avoid crashes and missed jumps;
+	// vanilla input handling is used instead.
+	bool spiderMode = playLayer->m_player1 && playLayer->m_player1->m_isSpider;
+	if (playLayer->m_gameState.m_isDualMode && playLayer->m_player2) spiderMode = spiderMode || playLayer->m_player2->m_isSpider;
+	if (spiderMode) {
+		skipUpdate = true;
+		stepQueue = {};
+		lastFrameTime = currentFrameTime;
+		firstFrame = false;
+		return;
+	}
+
 	nextInput = EMPTY_INPUT;
 	stepQueue = {}; // shouldnt be necessary, but just in case
 
@@ -93,8 +104,6 @@ void buildStepQueue(int stepCount) {
 	TimestampType deltaTime = currentFrameTime - lastFrameTime;
 	if (!std::isfinite(deltaTime) || deltaTime <= 0.0) {
 		skipUpdate = true;
-		firstFrame = true;
-		inputVector.clear();
 		stepQueue = {};
 		return;
 	}
@@ -355,8 +364,6 @@ class $modify(GJBaseGameLayer) {
 		PlayLayer* pl = PlayLayer::get();
 		if (!std::isfinite(modifiedDelta) || modifiedDelta <= 0.0f) {
 			skipUpdate = true;
-			firstFrame = true;
-			if (pl) inputVector.clear();
 			stepQueue = {};
 			return modifiedDelta;
 		}
